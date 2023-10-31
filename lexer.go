@@ -20,5 +20,15 @@ func main() {
 		fmt.Scanln(empty)
 	}
 
-	fmt.Println("Finished scanning! Goodbye!")
+	fmt.Println("Finished scanning!")
+
+	nfa := NewNFAFromRegex("ab*cdef(acd)*")
+	bc := "bc"
+	abcdefg := "abcdefg"
+	nexttrans := Transition{&abcdefg, nil}
+	nfa.transitions[1][0] = Transition{&bc, &nexttrans}
+
+	nfa.Print()
+
+	fmt.Println("Done printing! Goodbye!")
 }
