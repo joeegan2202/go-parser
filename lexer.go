@@ -26,7 +26,8 @@ func main() {
 	bc := "bc"
 	abcdefg := "abcdefg"
 	nexttrans := Transition{&abcdefg, nil}
-	nfa.transitions[1][0] = Transition{&bc, &nexttrans}
+	newTransition := Transition{&bc, &nexttrans}
+	nfa.transitions[1][0] = &newTransition
 
 	nfa.Print()
 

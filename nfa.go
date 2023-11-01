@@ -7,6 +7,14 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 )
 
+const (
+	CONCAT = 0
+	OR     = 1
+	KLEENE = 2
+)
+
+var Epsilon = "\000"
+
 type Transition struct {
 	digest *string
 	next   *Transition
@@ -14,7 +22,7 @@ type Transition struct {
 
 type NFA struct {
 	states       []string
-	transitions  [][]Transition
+	transitions  [][]*Transition
 	initialState int
 	finalStates  []int
 }
@@ -32,33 +40,117 @@ type Digraph struct {
 	endingNodes   []*DigraphNode
 }
 
-func (digraph Digraph) CountNodes() int {
-	accumulator := 0
-
-	seen := make([]*DigraphNode, 128)
+func (digraph Digraph) NodeList() []*DigraphNode {
+	seen := make([]*DigraphNode, 0, 128)
 
 	for _, node := range digraph.startingNodes {
-		for node != nil {
-			unique := true
+		unique := true
 
-			for _, seenNode := range seen {
-				if node == seenNode {
-					unique = false
-				}
+		for _, seenNode := range seen {
+			if node == seenNode {
+				unique = false
+				break
 			}
+		}
 
-			if unique {
-				accumulator++
-				seen = append(seen, node)
-			}
+		if unique {
+			seen = append(seen, node)
+			node.appendChildren(&seen)
 		}
 	}
 
-	return accumulator
+	return seen
+}
+
+func (node DigraphNode) appendChildren(seen *[]*DigraphNode) {
+	for _, child := range node.next {
+		unique := true
+
+		for _, seenNode := range *seen {
+			if child.node == seenNode {
+				unique = false
+				break
+			}
+		}
+
+		if unique {
+			*seen = append(*seen, child.node)
+			child.node.appendChildren(seen)
+		}
+	}
+}
+
+func NormalizeRegex(regex string) *Digraph {
+	digraph := new(Digraph)
+	finalNode := new(DigraphNode)
+	finalNode.name = regex
+	initialNode := new(DigraphNode)
+	initialNode.name = Epsilon
+	initialNode.next = []struct {
+		name string
+		node *DigraphNode
+	}{{regex, finalNode}}
+	digraph.startingNodes = []*DigraphNode{initialNode}
+	digraph.endingNodes = []*DigraphNode{finalNode}
+
+	initialNode.normalize()
+
+	return digraph
+}
+
+func (node DigraphNode) normalize() {
+	for i, next := range node.next {
+		if len(next.name) != 1 {
+
+		}
+	}
+}
+
+func nextOperation(regex string) (string, int, string) {
+	first := regex[0]
+	if first == '(' {
+
+	}
 }
 
 func (digraph Digraph) ToNFA() *NFA {
 	nfa := new(NFA)
+	graphNodes := digraph.NodeList()
+	nfa.states = make([]string, len(graphNodes)+1)
+	nfa.states[0] = "initial"
+	mapNodeToState := make(map[string]int, len(graphNodes))
+	mapNodeToState["initial"] = 0
+
+	for n, node := range graphNodes {
+		mapNodeToState[node.name] = n + 1
+		nfa.states[n+1] = node.name
+	}
+
+	nfa.transitions = make([][]*Transition, len(graphNodes)+1)
+	for i := range nfa.transitions {
+		nfa.transitions[i] = make([]*Transition, len(graphNodes)+1)
+	}
+
+	for _, node := range digraph.startingNodes {
+		epsilonTransition := new(Transition)
+		epsilonTransition.digest = &Epsilon
+		epsilonTransition.next = nil
+		nfa.transitions[0][mapNodeToState[node.name]] = epsilonTransition
+	}
+
+	for _, node := range graphNodes {
+		for _, child := range node.next {
+			newTransition := new(Transition)
+			*newTransition = Transition{&child.name,
+				nfa.transitions[mapNodeToState[node.name]][mapNodeToState[child.node.name]]}
+			nfa.transitions[mapNodeToState[node.name]][mapNodeToState[child.node.name]] = newTransition
+		}
+	}
+
+	nfa.finalStates = make([]int, len(digraph.endingNodes))
+	for i, node := range digraph.endingNodes {
+		nfa.finalStates[i] = mapNodeToState[node.name]
+	}
 
 	return nfa
 }
@@ -66,14 +158,16 @@ func (digraph Digraph) ToNFA() *NFA {
 func NewNFAFromRegex(regex string) *NFA {
 	nfa := new(NFA)
 	nfa.states = make([]string, 2, len(regex))
-	nfa.states[0] = "\000"
+	nfa.states[0] = Epsilon
 	nfa.states[1] = regex
 
-	nfa.transitions = make([][]Transition, len(nfa.states))
+	nfa.transitions = make([][]*Transition, len(nfa.states))
 	for i := range nfa.states {
-		nfa.transitions[i] = make([]Transition, len(nfa.states))
+		nfa.transitions[i] = make([]*Transition, len(nfa.states))
 	}
-	nfa.transitions[0][1] = Transition{&regex, nil}
+	newTransition := new(Transition)
+	*newTransition = Transition{&regex, nil}
+	nfa.transitions[0][1] = newTransition
 
 	nfa.initialState = 0
 	nfa.finalStates = make([]int, 1)
@@ -105,7 +199,7 @@ func (nfa *NFA) Print() {
 		row[0] = i
 
 		for t := range nfa.transitions[i] {
-			transition := &nfa.transitions[i][t]
+			transition := nfa.transitions[i][t]
 			s := ""
 			if transition.digest != nil {
 				s = *transition.digest
